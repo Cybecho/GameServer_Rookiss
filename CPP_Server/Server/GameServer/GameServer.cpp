@@ -3,34 +3,51 @@
 #include <iostream>
 #include <atomic>
 #include <thread>
+#include <mutex>
 
-atomic<int32> sum =	0;
+vector<int32> v;	//~ 벡터 선언
+mutex key;			//~ 뮤텍스 선언 (상호 배타적)
 
-void Add() 
+//! RAII 설정
+template<typename T> //~ 뭐가 들어올지 모르니 일단은 템플릿으로
+class LockGuard
 {
-	for (int32 i = 0; i < 1'000'000; i++)
+public:
+	//! 생성자
+	LockGuard(T& m) //~ 템플릿 레퍼런스를 인자로 받음
 	{
-		//sum ++;				// 그냥 sum++ 하면 이게 int인지 atomic<int>인지 몰라서 애매하다.
-		sum.fetch_add(1);	// 그래서 atomic을 명시하기 위해 이렇게 해야한다.
+		_mutex = &m;	// 
+		_mutex->lock();	// 생성자에서 lock을 대신 호출해줄거임
 	}
-}
-
-void Sub()
-{
-	for (int32 i = 0; i < 1'000'000; i++)
+	~LockGuard()
 	{
-		//sum--;				// 그냥 sum-- 하면 이게 int인지 atomic<int>인지 몰라서 애매하다.
-		sum.fetch_sub(1);	// 그래서 atomic을 명시하기 위해 이렇게 해야한다.
+		_mutex->unlock(); //~ 소멸자에서 unlock을 대신 호출해줄거임
+	}
+private:
+	T* _mutex; //~ 뮤텍스를 가리킬 포인터
+};
+
+void Push()
+{
+	for (int i = 0; i < 10'000; ++i)
+	{
+		LockGuard<mutex> lockGuard(key);//~ 락가드 생성자에서 락을 걸어줌
+		v.push_back(i);					//~ 해당 쓰레드 벡터 데이터 점유
+		if(i==5000) { break; };			//~ 5000번째에서 락 해제
 	}
 }
 
 int main()
 {
-	thread t1(Add);
-	thread t2(Sub);
+	v.reserve(20'000);
 
-	if(t1.joinable()) t1.join();
-	if(t2.joinable()) t2.join();
+	thread t1(Push);
+	thread t2(Push);
 
-	cout << sum << endl;
+	t1.join();
+	t2.join();
+
+	cout << v.size() << endl;
+
+	return 0;
 }
