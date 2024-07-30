@@ -43,9 +43,12 @@ public:
 		{
 			expected = false; // 해당 함수는 &bool 로 받아오기 때문에, 다시 false 로 초기화 해줘야 한다.
 
-			this_thread::sleep_for(std::chrono::microseconds(100)); // 실패하면 0.1ms 대기
-			this_thread::sleep_for(0ms); // 실패하면 바로 양보
-			this_thread::yield(); // 양보
+			// 방법 1 : 실패하면 100ms 뒤에 CPU 점유권 포기
+			this_thread::sleep_for(std::chrono::microseconds(100));
+			// 방법 2 : 실패하면 0초 뒤에 바로 CPU점유권 포기
+			this_thread::sleep_for(0ms);
+			// 방법 3 : yield() 를 통해 현재 CPU점유권 양보하기
+			this_thread::yield();
 		}
 
 	};
