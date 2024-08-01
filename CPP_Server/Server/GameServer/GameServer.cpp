@@ -5,58 +5,72 @@
 #include <thread>
 #include <mutex>
 #include <Windows.h>
+#include <future>
 
-mutex m;
-queue<int32> q;
+using namespace std;
 
-condition_variable cv; // CV는 커널 오브젝트가 아니다 (유저 오브젝트임)
-
-//! 데이터를 삽입하는 스레드 (생산자)
-void Producer()
+int64 Calculater()
 {
-	while (true)
-	{
-		// 1) Lock을 걸고
-		// 2) 공유변수 데이터를 수정하고
-		// 3) Lock을 풀고
-		// 4) 조건 변수를 통해 다른 스레드가 Lock을 걸 수 있도록 해준다.
+	int64 sum = 0;
 
-		{
-			unique_lock<mutex> guard(m);		// 공유 자원에 데이터 삽입을 위해 잠금
-			q.push(1000);								// 큐에 데이터 삽입
-		}
-		this_thread::sleep_for(1s);		// 1초 대기
-		cv.notify_one(); // 대기중인 스레드중 하나의 스레드만 꺠운다.
+	for (int32 i = 0; i < 100'000'000; i++)
+	{
+		sum += i;
 	}
+
+	return sum;
 }
 
-//! 데이터를 꺼내쓰는 스레드 (소비자)
-void Consumer()
+void PromiseWorker(promise<string>&& promise)  // 값 자체를 옮길거기 때문에 오른 참조
 {
-	while (true)
-	{
-		unique_lock<mutex> lock(m);
-		cv.wait(lock, []() { return q.empty() == false; });		// 큐가 비어있지 않다면 깨운다.
-		// 1) Lock을 걸고
-		// 2) 조건 변수 확인
-		// -> 만족 O : 대기wait 을 빠져나와 아래 코드를 실행		(큐에 데이터가 있다는 소리)
-		// -> 만족 X : 대기wait 상태로 전환							(큐에 데이터가 없다는 소리)
+	promise.set_value("Secret");
+}
 
-		// notify_one 할때 lock을 잡고 있는것이 아니기 때문에 wait에서 lock을 넘겨줘야한다.
-		{
-			int32 data = q.front();
-			q.pop();
-			cout << "Queue Size: " << q.size() << " Data: " << data << endl;
-		}
-	}
+void TaskWorker(packaged_task<int64(void)>&& task) // 값 자체를 옮길거기 때문에 오른 참조
+{
+	task(); // 전달받은 함수인 task를 그냥 실행해버리기만 할거임
+	// 따로 return 은 하지 않는다. 함수 외부에서 future를 통해 결과를 받을 수 있음
 }
 
 int main()
 {
+	//! future
+	{
+		/*
+		1) deferred				: 지연에서 실행하셈 (lazy evaluation)
+		2) async(기본)			: 비동기로 실행하셈 (별도의 스레드 생성)
+		3) deferred | async 	: 둘 중 알아서 골라서 쓰셈
+		*/
+		future<int64> future = async(launch::async, Calculater);
+		int64 result = future.get();
+	}
+	
+	//!promise
+	{
+		// 미래에 결과물을 반환할꺼라 약속하는것임 
+		// (promise는 추후에 future을 반환해야만함)
+		promise<string> promise;									// 이 약속은 promise가 1차적으로 가질것이고
+		future<string> future = promise.get_future();		// 이 약속은 future가 2차적으로 가질것입니다
 
-	thread t1(Producer);
-	thread t2(Consumer);
+		// 이 상황에서 새로운 스레드가 생성되었다면
+		thread t(PromiseWorker, move(promise)); 			// promise를 move로 넘겨줍니다
 
-	t1.join();
-	t2.join();
+		string message = future.get();
+		cout << message << endl;
+
+		t.join();
+	}
+
+	//! packaged_task
+	{
+		// packaged_task<출력타입(입력타입)>
+		// 함수타입과 1:1로 맞춰야한다
+		packaged_task<int64(void)> task(Calculater);		// 다른 스레드에서 Calculater를 실행하고 결과를 반환해주쇼
+		future<int64> future = task.get_future();				// future를 통해 결과를 받을 수 있음
+
+		thread t(TaskWorker, move(task));						// task를 move로 넘겨줍니다
+		
+		int64 sum = future.get();
+		cout << sum << endl;
+	}
 }
