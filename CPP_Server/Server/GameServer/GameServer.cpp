@@ -7,35 +7,51 @@
 #include <Windows.h>
 #include <future>
 
-int32 buffer[10'000][10'000];
+int32 x = 0;
+int32 y = 0;
+int32 r1 = 0;
+int32 r2 = 0;
+
+volatile bool ready; // 상황을 체크하기 위해 불라틸 변수 설정
+
+void Thread_1()
+{
+	while (!ready); // ready가 true가 될 때까지 뺑뻉이 돌며 대기
+
+	y = 1;		// Store y (y값에 R value 덮어쓰기)
+	r1 = x;	// Load x (x값을 L value에 저장)
+}
+
+void Thread_2()
+{
+	while (!ready); // ready가 true가 될 때까지 뺑뻉이 돌며 대기
+
+	x = 1;
+	r2 = y;
+}
 
 int main()
 {
-	memset(buffer, 0, sizeof(buffer)); // 배열을 전부 0값으로 초기화
+	int32 count = 0;
 
-	//! [i][j] 순으로 더하기
+	while (true)
 	{
-		uint64 start = GetTickCount64(); //~ 시작 시간 측정
+		ready = false; //~ ready를 false로 초기화
+		count++;
 
-		int64 sum = 0;
-		for (int32 i = 0; i < 10'000; i++)
-			for (int32 j = 0; j < 10'000; j++)
-				sum += buffer[i][j];
+		x = y = r1 = r2 = 0;
 
-		uint64 end = GetTickCount64(); // ~ 종료 시간 측정 
-		cout << "Elapsed Time [i][j] : " << (end - start) << endl;
+		thread t1(Thread_1);
+		thread t2(Thread_2);
+
+		ready = true; //~ ready를 true로 초기화 (스레드 함수는 내부에서 while을 탈출하겠지?)
+		t1.join();
+		t2.join();
+		cout << "r1: " << r1 << ", r2: " << r2 << endl;
+
+		if (r1 == 0 && r2 == 0)
+			break; // r1과 r2가 동시에 0이 되는 상황이 있다면 while을 빠져나가겠지?
 	}
-	
-	//! [j][i] 순으로 더하기
-	{
-		uint64 start = GetTickCount64(); //~ 시작 시간 측정
 
-		int64 sum = 0;
-		for (int32 i = 0; i < 10'000; i++)
-			for (int32 j = 0; j < 10'000; j++)
-				sum += buffer[j][i];
-
-		uint64 end = GetTickCount64(); // ~ 종료 시간 측정 
-		cout << "Elapsed Time [j][i] : " << (end - start) << endl;
-	}
+	cout << count << " 번 만에 탈출성공" << endl;
 }
