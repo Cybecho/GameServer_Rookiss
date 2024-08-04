@@ -7,37 +7,36 @@
 #include <Windows.h>
 #include <future>
 
-atomic<bool> ready;
-int32 value;
+using namespace std;
 
-void Producer()
-{
-	value = 10;
-	ready.store(true, memory_order::memory_order_release);
-	// -------- realse를 통한 일종의 절취선이 생김 --------
-}
+//! C++11 이전 TLS 를 사용하는 방법
+__deallocate(thread) int32 ord_LThread;
 
-void Consumer()
+//! C++11 이후 TLS 를 사용하는 방법
+thread_local int32 LThread = 0;
+
+void ThreadMain(int32 threadid)
 {
-	// -------- acquire를 통한 일종의 절취선이 생김 --------
-	while (ready.load(memory_order::memory_order_acquire) == false) // 계속 기다림
-		; 
-	cout << value << endl;
+	LThread = threadid; //! TLS 에 현재 스레드 ID 를 저장한다.
+	while (true) 
+	{
+		cout << "Thread ID : " << LThread << endl;
+		this_thread::sleep_for(1s);
+	}
 }
 
 int main()
 {
-	ready = false;
-	value = 0;
-	thread t1(Producer);
-	thread t2(Consumer);
-	t1.join();
-	t2.join();
+	vector<thread> threads;
 
-	// Memory Model(정책)
-	// 1) Sequentially-Consistent (일관성 있는) - [seq_cst]
-	// 가시성 문제가 바로 해결됨
-	// 코드 재배치 문제도 해결됨
-	// 2) Acquire-Release (획득-방출) - [acq_rel]
-	// 3) Relaxed (완화된) - [relaxed]
+	for(int32 i = 0; i < 10; ++i)
+	{
+		int32 threadid = i;												//~ 스레드 아이디 설정
+		threads.push_back(thread(ThreadMain, threadid));	//~ 벡터 내부에 새로운 스레드를 생성한다. 인자로는 스레드 아이디어를 직접 부여
+	}
+
+	for (thread& t : threads)
+	{
+		t.join();	//~ 생성된 스레드들을 모두 종료시킨다.
+	}
 }
