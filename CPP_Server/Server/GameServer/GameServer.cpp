@@ -1,16 +1,12 @@
 ﻿#include "pch.h"
-#include "CorePch.h" 
 #include <iostream>
+#include "CorePch.h"
 #include <atomic>
-#include <thread>
 #include <mutex>
-#include <Windows.h>
+#include <windows.h>
 #include <future>
-
 #include "ConcurrentQueue.h"
 #include "ConcurrentStack.h"
-
-using namespace std;
 
 LockQueue<int32> q;
 LockFreeStack<int32> s;
@@ -19,11 +15,10 @@ void Push()
 {
 	while (true)
 	{
-		{
-			int32 value = rand() % 10;
-			s.Push(value);
-			//this_thread::sleep_for(1s);
-		}
+		int32 value = rand() % 100;
+		s.Push(value);
+
+		this_thread::sleep_for(1ms);
 	}
 }
 
@@ -31,18 +26,20 @@ void Pop()
 {
 	while (true)
 	{
-		int32 data = 0;
-		if (s.TryPop(OUT data))						// 버전 1
-			cout << "Pop : " << data << endl;
-
-		//this_thread::sleep_for(1s);
+		auto data = s.TryPop();
+		if (data != nullptr)
+			cout << (*data) << endl;
 	}
 }
 
+
 int main()
 {
-	thread t1(Pop);
-	thread t2(Push);
+	thread t1(Push);
+	thread t2(Pop);
+	thread t3(Pop);
+
 	t1.join();
 	t2.join();
+	t3.join();
 }
