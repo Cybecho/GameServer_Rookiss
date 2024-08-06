@@ -13,7 +13,7 @@
 using namespace std;
 
 LockQueue<int32> q;
-LockStack<int32> s;
+LockFreeStack<int32> s;
 
 void Push()
 {
@@ -21,8 +21,8 @@ void Push()
 	{
 		{
 			int32 value = rand() % 10;
-			q.Push(value);
-			this_thread::sleep_for(1s);
+			s.Push(value);
+			//this_thread::sleep_for(1s);
 		}
 	}
 }
@@ -32,11 +32,10 @@ void Pop()
 	while (true)
 	{
 		int32 data = 0;
-		if (q.TryPop(OUT data))						// 버전 1
-		if (q.WaitPop(OUT data))						// 버전 2
+		if (s.TryPop(OUT data))						// 버전 1
 			cout << "Pop : " << data << endl;
 
-		this_thread::sleep_for(1s);
+		//this_thread::sleep_for(1s);
 	}
 }
 
