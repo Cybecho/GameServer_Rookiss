@@ -15,7 +15,7 @@ ThreadManager::~ThreadManager()
 	Join();			// 모든 스레드가 종료될 때까지 대기
 }
 
-void ThreadManager::Launch(function<void(void)> callback)
+void ThreadManager::Lauch(function<void(void)> callback)
 {
 	LockGuard guard(_lock);	// 여러 스레드가 접근할수도 있으니, 일단 락
 	_threads.push_back(thread([=]()	// 람다 함수로 쓰레드 생성
@@ -40,7 +40,7 @@ void ThreadManager::Join()
 void ThreadManager::InitTLS()
 {
 	static Atomic<uint32> SThreadId = 1;	// 스레드 아이디 생성 static이라 클래스 내에서 공유됨
-	LThreadid = SThreadId.fetch_add(1);		// 스레드가 생성될때마다 1씩 증가된 아이디를 부여
+	LThreadid = SThreadId++;					// 스레드가 생성될때마다 1씩 증가된 아이디를 부여
 }
 
 void ThreadManager::DestroyTLS()

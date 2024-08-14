@@ -11,7 +11,7 @@ public:
 	ThreadManager();
 	~ThreadManager();
 
-	void			Launch(function<void(void)> callback);
+	void			Lauch(function<void(void)> callback);
 	void			Join();
 	static void	InitTLS();			// TLS 초기화
 	static void	DestroyTLS();		// TLS 해제
