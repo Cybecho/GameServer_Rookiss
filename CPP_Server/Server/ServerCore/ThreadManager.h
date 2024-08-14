@@ -3,7 +3,9 @@
 #include <thread>
 #include <functional>
 
-
+/*------------------
+	ThreadManager
+-------------------*/
 
 class ThreadManager
 {
@@ -11,11 +13,14 @@ public:
 	ThreadManager();
 	~ThreadManager();
 
-	void			Lauch(function<void(void)> callback);
-	void			Join();
-	static void	InitTLS();			// TLS 초기화
-	static void	DestroyTLS();		// TLS 해제
+	void	Launch(function<void(void)> callback);
+	void	Join();
+
+	static void InitTLS();
+	static void DestroyTLS();
+
 private:
-	Mutex				_lock;
+	Mutex			_lock;
 	vector<thread>	_threads;
 };
+
