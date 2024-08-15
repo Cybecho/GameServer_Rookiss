@@ -1,35 +1,34 @@
-#pragma once
+癤�#pragma once
 
 #define OUT
 
 /*---------------
-	  Lock 관련 매크로
+	  Lock
 ---------------*/
 
-#define USE_MANY_LOCKS(count)		Lock _locks[count];
-#define USE_LOCK								USE_MANY_LOCKS(1)
-#define READ_LOCK_IDX(idx)				ReadLockGuard _readLockGuard##idx(_locks[idx]);
-#define READ_LOCK							READ_LOCK_IDX(0)
-#define WRITE_LOCK_IDX(idx)				WriteLockGuard _writeLockGuard##idx(_locks[idx]);
-#define WRITE_LOCK							WRITE_LOCK_IDX(0)
-
+#define USE_MANY_LOCKS(count)	Lock _locks[count];
+#define USE_LOCK							USE_MANY_LOCKS(1)
+#define	READ_LOCK_IDX(idx)			ReadLockGuard readLockGuard_##idx(_locks[idx], typeid(this).name());
+#define READ_LOCK						READ_LOCK_IDX(0)
+#define	WRITE_LOCK_IDX(idx)			WriteLockGuard writeLockGuard_##idx(_locks[idx], typeid(this).name());
+#define WRITE_LOCK						WRITE_LOCK_IDX(0)
 
 /*---------------
-	  Crash 관련 매크로
+	  Crash
 ---------------*/
 
 #define CRASH(cause)						\
-{														\
-	uint32* crash = nullptr;					\
+{											\
+	uint32* crash = nullptr;				\
 	__analysis_assume(crash != nullptr);	\
 	*crash = 0xDEADBEEF;					\
 }
 
 #define ASSERT_CRASH(expr)			\
-{													\
-	if (!(expr))									\
-	{												\
+{									\
+	if (!(expr))					\
+	{								\
 		CRASH("ASSERT_CRASH");		\
-		__analysis_assume(expr);			\
-	}												\
+		__analysis_assume(expr);	\
+	}								\
 }

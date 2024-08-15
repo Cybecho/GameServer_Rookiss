@@ -1,96 +1,93 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "Lock.h"
 #include "CoreTLS.h"
+#include "DeadLockProfiler.h"
 
-//! ¾Æ¹«µµ ReadÁßÀÌ ¾Æ´Ò¶§ Write °¡´É!
-void Lock::WriteLock()
+void Lock::WriteLock(const char* name)
 {
-	//? Áß¿äÇÑ°Ç, ReadLockÀÌ ÇÏ³ª¶óµµ ÀÖÀ¸¸é WriteLockÀº °¡Áú ¼ö ¾øÀ½
-	// ? Áï, ¾²±â À§ÇØ¼± ¾Æ¹«µµ ÀĞÁö ¾Ê°í ÀÖ¾î¾ßÇÔ!
-	// Write¸¦ ¾Æ¹«µµ ¼ÒÀ¯ ¹× °øÀ¯ÇÏ°í ÀÖÁö ¾ÊÀ»¶§, °æÇÕÇØ¼­ ¼ÒÀ¯±ÇÀ» ¾ò´Â´Ù
-	
-	//~ ¸¸¾à, µ¿ÀÏÇÑ ½º·¹µå°¡ ÀÌ¹Ì WRITE LOCKÀ» ¼ÒÀ¯ÇÏ°í ÀÖ´Ù¸é?
-	//~ ÇöÀç WRITE COUNT MASK ¿µ¿ª¿¡ ÀÖ´Â ºñÆ®¸¦ ÇÏÀ§ 16ºñÆ® ºÎºĞÀ¸·Î ¿Å±â°í
-	const uint32 lockThreadId = (_lockFlag.load() & WRITE_COUNT_MASK) >> 16;
-	if (LThreadId == lockThreadId) //~ ³» ID¿Í Áö±İ WriteLockÀ» ¼ÒÀ¯ÁßÀÎ Lock°ú µ¿ÀÏÇÑ ½º·¹µå¾ß?
+#if _DEBUG
+	GDeadLockProfiler->PushLock(name);
+#endif
+	// ë™ì¼í•œ ì“°ë ˆë“œê°€ ì†Œìœ í•˜ê³  ìˆë‹¤ë©´ ë¬´ì¡°ê±´ ì„±ê³µ.
+	const uint32 lockThreadId = (_lockFlag.load() & WRITE_THREAD_MASK) >> 16;
+	if (LThreadId == lockThreadId)
 	{
 		_writeCount++;
 		return;
 	}
 
-	//~ [WWWWWWWW] [WWWWWWWW]  ¿µ¿ª¿¡ ³» lock¹øÈ£¸¦ ±âÀÔÇÏ¸é ³»²¨°¡ µÊ
-	//~ ±×·³, ³» ½º·¹µå ¾ÆÀÌµğÀÎ LTreadId¸¦ [W]¿µ¿ª¿¡ 16ºñÆ®¸¦ Àû¾î¼­ ¿Å°ÜÁÜ
-	const int64 beginTick = GetTickCount64();										// ½ÃÀÛ ½Ã°£
-	const uint32 desired = ((LThreadId << 16) & WRITE_COUNT_MASK);
-	while (true)
-	{
-		for (uint32 spinCount = 0; spinCount < MAX_SPIN_COUNT; spinCount++)
-		{	//? 5000¹øµ¿¾È ½ºÇÉ¶ô »æ»æµ¹¸ç WRITE LOCK ¾ò¾îº¸ÀÚ~
-			uint32 expected = EMPTY_FLAG;
-			if (_lockFlag.compare_exchange_strong(OUT expected, desired))
-			{	//? ¿©±â±îÁö µé¾î¿ÔÀ¸¸é, ÀÌÁ¦ WRITE LOCKÀ» ¾òÀº°ÅÀÓ
-				_writeCount++;
-				return;
-			}
-		}
-		// ´ë±â ½Ã°£ÀÌ ³Ê¹« ¿À·¡°É¸°´Ù¸é ±×³É ÇÁ·Î±×·¥ Å©·¡½Ã³»ÀÚ! 
-		if (::GetTickCount64() - beginTick >= ACQUIRE_TIMEOUT_TICK)
-			CRASH("LOCK TIMEOUT ! ! !");
-
-		this_thread::yield();	//? 5000¹ø ½ºÇÉ¶ô µ¹¾Ò´Âµ¥µµ ¸ø¾ò¾úÀ¸¸é, ´Ù¸¥ ½º·¹µå¿¡°Ô ¾çº¸ÇÏ°í ´Ù½Ã ½ÃµµÇØº¸ÀÚ~
-	}
-}
-
-void Lock::WriteUnlock()
-{
-	//~ ¾Æ! ¾îÃ³ÇÇ Write´Â ¾Æ¹«µµ Read¸¦ ÇÏ°íÀÖÁö¾ÊÀ»¶§ °¡´ÉÇÏ´Ï±î, 
-	//~ ³»°¡ WriteÇÏÁö ¾Ê´Â´Ù´Â°ÍÀº,
-	//~ °á±¹ WriteºñÆ®¿Í ReadºñÆ® µÑ ´Ù 0ÀÌ µÇ´Â »óÈ²ÀÌ°Ú±¸³ª!
-
-	if((_lockFlag.load() & READ_COUNT_MASK) != 0) // ÀĞ´Â ½º·¹µå°¡ ÇÏ³ª¶óµµ ÀÖÀ¸¸é WriteLockÀ» ÇØÁ¦ÇÒ ¼ö ¾ø´Ù
-		CRASH("READ LOCK IS ALREADY EXIST ! ! !");
-
-	const int32 lockCount = --_writeCount; // ³»°¡ ¼ÒÀ¯ÇÑ WriteLockÀ» ÇÏ³ª ÁÙÀÎ´Ù
-	if (lockCount == 0)								// ³»°¡ ¼ÒÀ¯ÇÑ WriteLockÀÌ ¾ø´Ù¸é
-		_lockFlag.store(EMPTY_FLAG);			// ³»°¡ ¼ÒÀ¯ÇÑ lockFlag¸¦ Empty·Î ¸¸µé¾îÁØ´Ù
-		
-}
-
-//! ¾Æ¹«µµ WriteÁßÀÌ ¾Æ´Ò¶§ Read °¡´É!
-void Lock::ReadLock()
-{
-	//~ ÀÌ¹Ì WRITE LOCKÀ» ¼ÒÀ¯ÇÏ°í ÀÖ´Â »óÅÂ¿¡¼­ READ¸¦ ÇÏ·Á°íÇÑ´Ù¸é?
-	//~ ÇöÀç WRITE COUNT MASK ¿µ¿ª¿¡ ÀÖ´Â ºñÆ®¸¦ ÇÏÀ§ 16ºñÆ® ºÎºĞÀ¸·Î ¿Å±â°í
-	const uint32 lockThreadId = (_lockFlag.load() & WRITE_COUNT_MASK) >> 16;
-	if (LThreadId == lockThreadId) //~ ³» ID¿Í Áö±İ WriteLockÀ» ¼ÒÀ¯ÁßÀÎ Lock°ú µ¿ÀÏÇÑ ½º·¹µå¾ß?
-	{
-		_lockFlag.fetch_add(1); // ³»°¡ ÀÌ¹Ì write¸¦ °¡Áö°íÀÖÀ¸¸é, ´Ù¸¥ ½º·¹µå´Â ¾îÃ³ÇÇ ¸øµé¾î¿ÀÀİ¾Æ?
-		return;
-	}
-
-	// ¾Æ¹«µµ  ReadLockÀ» ¼ÒÀ¯ÇÏ°í ÀÖÁö ¾ÊÀ»¶§, °æÇÕÇØ¼­ ¼ÒÀ¯±ÇÀ» ¾ò´Â´Ù
-	const int64 beginTick = GetTickCount64();										// ½ÃÀÛ ½Ã°£
+	// ì•„ë¬´ë„ ì†Œìœ  ë° ê³µìœ í•˜ê³  ìˆì§€ ì•Šì„ ë•Œ, ê²½í•©í•´ì„œ ì†Œìœ ê¶Œì„ ì–»ëŠ”ë‹¤.
+	const int64 beginTick = ::GetTickCount64();
+	const uint32 desired = ((LThreadId << 16) & WRITE_THREAD_MASK);
 	while (true)
 	{
 		for (uint32 spinCount = 0; spinCount < MAX_SPIN_COUNT; spinCount++)
 		{
-			//~ READ 16ºñÆ® ¿µ¿ªÀ» Á¦¿ÜÇÏ°í, WRITE 16ºñÆ® ¿µ¿ªÀÌ ºñ¾îÀÖÀ»¶§ ReadLockÀ» Àâ¾Æ¾ßÇÔ
-			uint32 expected = (_lockFlag.load() & READ_COUNT_MASK);
-			if (_lockFlag.compare_exchange_strong(OUT expected, expected+1))
-				return; //~ À§ »óÈ²ÀÌ ¸ÂÀ¸¸é, expected°ªÀ» 1Áõ°¡½ÃÄÑ¼­ READ LOCKÀ» ¾òÀº°ÅÀÓ
+			uint32 expected = EMPTY_FLAG;
+			if (_lockFlag.compare_exchange_strong(OUT expected, desired))
+			{
+				_writeCount++;
+				return;
+			}
 		}
-		// ´ë±â ½Ã°£ÀÌ ³Ê¹« ¿À·¡°É¸°´Ù¸é ±×³É ÇÁ·Î±×·¥ Å©·¡½Ã³»ÀÚ! 
-		if (::GetTickCount64() - beginTick >= ACQUIRE_TIMEOUT_TICK)
-			CRASH("LOCK TIMEOUT ! ! !");
 
-		this_thread::yield(); // 5000¹ø ½ºÇÉ¶ô µ¹¾Ò´Âµ¥µµ ¸ø¾ò¾úÀ¸¸é, ´Ù¸¥ ½º·¹µå¿¡°Ô ¾çº¸ÇÏ°í ´Ù½Ã ½ÃµµÇØº¸ÀÚ~
+		if (::GetTickCount64() - beginTick >= ACQUIRE_TIMEOUT_TICK)
+			CRASH("LOCK_TIMEOUT");
+
+		this_thread::yield();
 	}
 }
 
-void Lock::ReadUnlock()
+void Lock::WriteUnlock(const char* name)
 {
-	//~ fetch_sub ´Â ÈÄÀ§¿¬»êÀÚ¶û ¶È°°¾Æ¼­ ÀÌÀü°ª ¹ñ´Âµ¥, ÀÌÀü°ªÀÌ ÀÌ¹Ì 0ÀÌ¾ß? 
-	//~ ¹¦ÇÑ »óÈ², ±×³É ÇÁ·Î±×·¥ ÆãÅ©³ª¶ó 
+#if _DEBUG
+	GDeadLockProfiler->PopLock(name);
+#endif
+	// ReadLock ë‹¤ í’€ê¸° ì „ì—ëŠ” WriteUnlock ë¶ˆê°€ëŠ¥.
+	if ((_lockFlag.load() & READ_COUNT_MASK) != 0)
+		CRASH("INVALID_UNLOCK_ORDER");
+
+	const int32 lockCount = --_writeCount;
+	if (lockCount == 0)
+		_lockFlag.store(EMPTY_FLAG);
+}
+
+void Lock::ReadLock(const char* name)
+{
+#if _DEBUG
+	GDeadLockProfiler->PushLock(name);
+#endif
+	// ë™ì¼í•œ ì“°ë ˆë“œê°€ ì†Œìœ í•˜ê³  ìˆë‹¤ë©´ ë¬´ì¡°ê±´ ì„±ê³µ.
+	const uint32 lockThreadId = (_lockFlag.load() & WRITE_THREAD_MASK) >> 16;
+	if (LThreadId == lockThreadId)
+	{
+		_lockFlag.fetch_add(1);
+		return;
+	}
+
+	// ì•„ë¬´ë„ ì†Œìœ í•˜ê³  ìˆì§€ ì•Šì„ ë•Œ ê²½í•©í•´ì„œ ê³µìœ  ì¹´ìš´íŠ¸ë¥¼ ì˜¬ë¦°ë‹¤.
+	const int64 beginTick = ::GetTickCount64();
+	while (true)
+	{
+		for (uint32 spinCount = 0; spinCount < MAX_SPIN_COUNT; spinCount++)
+		{
+			uint32 expected = (_lockFlag.load() & READ_COUNT_MASK);
+			if (_lockFlag.compare_exchange_strong(OUT expected, expected + 1))
+				return;
+		}
+
+		if (::GetTickCount64() - beginTick >= ACQUIRE_TIMEOUT_TICK)
+			CRASH("LOCK_TIMEOUT");
+
+		this_thread::yield();
+	}
+}
+
+void Lock::ReadUnlock(const char* name)
+{
+#if _DEBUG
+	GDeadLockProfiler->PopLock(name);
+#endif
 	if ((_lockFlag.fetch_sub(1) & READ_COUNT_MASK) == 0)
-		CRASH("MULTIPLE_UNLOCK ! ! !");
+		CRASH("MULTIPLE_UNLOCK");
 }
